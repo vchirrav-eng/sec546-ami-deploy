@@ -242,16 +242,22 @@ Several SEC546 labs call an LLM. The AMI is configured to reach a **SANS-provide
 LiteLLM endpoint** using a **SANS-provided API key**, which your class lab setup
 guide tells you how to set.
 
+> **Keep using the SANS key for as long as it works — that is the first
+> preference.** It normally keeps working for **a few days after the course
+> ends**, so you can carry on practising with the labs after class without
+> setting anything up.
+>
 > **The SANS endpoint itself should remain available. The SANS-provided API key
-> can expire at any time**, including in the middle of class. If your LLM-backed
+> can expire at any time**, though — including during class. If your LLM-backed
 > labs start failing with `401 Unauthorized`, `403 Forbidden`, or an
 > authentication error, an expired key is the most likely cause.
 >
-> **First, ask your instructor for a refreshed key.** Use the fallback below only
-> if a replacement is not available and you want to keep working.
+> **Only once the SANS key has stopped working** should you switch to your own
+> Bedrock access below. During class, ask your instructor for a refreshed key
+> first.
 
-The fallback is to point the labs at **your own AWS Bedrock account** instead,
-using these models:
+When that day comes, the fallback is to point the labs at **your own AWS Bedrock
+account** instead, using these models:
 
 | Model ID | Notes |
 |----------|-------|
