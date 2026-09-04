@@ -45,8 +45,6 @@ This is the one step you cannot do yourself.
    - `aws sts get-caller-identity --query Account --output text`
 2. Send that account ID to your SANS instructor or course support contact and
    ask them to share the **latest SEC546 lab AMI** in region **`us-east-2`**.
-   Use the ready-made message in
-   [`docs/ami-access-request-template.md`](docs/ami-access-request-template.md).
 3. SANS replies with an **AMI ID** that looks like `ami-0a1b2c3d4e5f67890`.
    **Save it — you need it in Step 5.**
 4. Confirm the share reached you. In the AWS Console, switch the region selector
@@ -267,8 +265,6 @@ infra/iam/
   sec546-lab-policy.json        Least-privilege IAM policy for the workflow user
 scripts/
   generate-student-package.py   Builds the SmartProxy config + package
-docs/
-  ami-access-request-template.md   Copy-paste request to send to SANS
 ```
 
 ---
