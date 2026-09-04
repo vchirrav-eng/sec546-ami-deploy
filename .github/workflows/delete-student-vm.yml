@@ -1,0 +1,113 @@
+name: Delete Student VM
+
+# Terminates the student VM provisioned by deploy-student-vms.yml for a given
+# run number, then cleans up the security group and SSH key pair that the
+# deploy workflow created.
+#
+# Use this after a class delivery (or after a test run of the deploy workflow)
+# to avoid orphaned AWS resources.
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_run_number:
+        description: "Run number of the Deploy Student VM workflow to clean up (e.g. 42)"
+        required: true
+        type: string
+      region:
+        description: "AWS region"
+        required: false
+        default: "us-east-2"
+        type: string
+
+env:
+  DEPLOY_REGION: ${{ github.event.inputs.region }}
+
+jobs:
+  delete-student-vm:
+    name: Terminate student VM and clean up
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.DEPLOY_REGION }}
+
+      - name: Find and terminate student instance
+        id: terminate
+        run: |
+          RUN="${{ github.event.inputs.deploy_run_number }}"
+
+          INSTANCE_IDS=$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:DeployRun,Values=${RUN}" \
+              "Name=instance-state-name,Values=running,stopped,pending" \
+            --query "Reservations[].Instances[].InstanceId" \
+            --output text \
+            --region ${{ env.DEPLOY_REGION }})
+
+          if [ -z "${INSTANCE_IDS}" ] || [ "${INSTANCE_IDS}" = "None" ]; then
+            echo "No student instances found for deploy run ${RUN}."
+            echo "instance_ids=" >> $GITHUB_OUTPUT
+          else
+            echo "Terminating: ${INSTANCE_IDS}"
+            aws ec2 terminate-instances \
+              --instance-ids ${INSTANCE_IDS} \
+              --region ${{ env.DEPLOY_REGION }}
+            echo "instance_ids=${INSTANCE_IDS}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Delete student security group
+        run: |
+          RUN="${{ github.event.inputs.deploy_run_number }}"
+
+          SG_ID=$(aws ec2 describe-security-groups \
+            --filters "Name=group-name,Values=sec546-student-sg-${RUN}" \
+            --query "SecurityGroups[0].GroupId" \
+            --output text \
+            --region ${{ env.DEPLOY_REGION }} 2>/dev/null || echo "None")
+
+          if [ "${SG_ID}" = "None" ] || [ -z "${SG_ID}" ]; then
+            echo "Security group sec546-student-sg-${RUN} not found — already deleted."
+          else
+            INSTANCE_IDS="${{ steps.terminate.outputs.instance_ids }}"
+            if [ -n "${INSTANCE_IDS}" ] && [ "${INSTANCE_IDS}" != "None" ]; then
+              echo "Waiting for instance to fully terminate..."
+              aws ec2 wait instance-terminated \
+                --instance-ids ${INSTANCE_IDS} \
+                --region ${{ env.DEPLOY_REGION }}
+            fi
+            aws ec2 delete-security-group \
+              --group-id "${SG_ID}" \
+              --region ${{ env.DEPLOY_REGION }} && \
+              echo "Deleted security group: ${SG_ID}" || \
+              echo "WARNING: Could not delete ${SG_ID} — delete manually."
+          fi
+
+      - name: Delete student key pair
+        run: |
+          RUN="${{ github.event.inputs.deploy_run_number }}"
+          aws ec2 delete-key-pair \
+            --key-name "sec546-student-run${RUN}" \
+            --region ${{ env.DEPLOY_REGION }} 2>/dev/null && \
+            echo "Deleted key: sec546-student-run${RUN}" || \
+            echo "Key sec546-student-run${RUN} not found — already deleted."
+
+      - name: Job summary
+        run: |
+          RUN="${{ github.event.inputs.deploy_run_number }}"
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## Student VM Deleted
+
+          | | |
+          |-|-|
+          | Deploy run | ${RUN} |
+          | Region     | ${{ env.DEPLOY_REGION }} |
+          | Terminated | ${{ steps.terminate.outputs.instance_ids || 'none found' }} |
+
+          Instance, security group, and key pair for deploy run ${RUN} have been cleaned up.
+          EOF

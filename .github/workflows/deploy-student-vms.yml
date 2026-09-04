@@ -1,0 +1,193 @@
+name: Deploy Student VM
+
+# Launches a single student VM from a pre-built SEC546 AMI and produces the
+# connection package as a downloadable artifact. The AMI already has setup.sh
+# baked in, so this workflow only handles infra + packaging — no in-VM
+# provisioning.
+#
+# VM stays running after the job. Terminate via the AWS console (filter by
+# tag DeployRun=<run_number>) or the one-liner in the job summary.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ami_id:
+        description: "AMI ID to launch from (us-east-2). Get this from build-lab-image.yml output."
+        required: true
+        type: string
+      course:
+        description: "Course edition this AMI is for (label only — the AMI ID determines the actual content)"
+        required: true
+        type: choice
+        default: "5-day (L02)"
+        options:
+          - "5-day (L02)"
+          - "2-day (main)"
+
+env:
+  BUILD_REGION:  us-east-2
+  INSTANCE_TYPE: m6i.2xlarge
+  ADMIN_USER:    ubuntu
+
+jobs:
+  deploy:
+    name: Provision student VM and produce connection package
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          AMI="${{ inputs.ami_id }}"
+          if ! [[ "${AMI}" =~ ^ami-[0-9a-f]+$ ]]; then
+            echo "ami_id must look like 'ami-xxxxxxxxxxxxxxxxx' (got '${AMI}')"; exit 1
+          fi
+          echo "Deploying ${{ github.event.inputs.course }} from AMI ${AMI}"
+          echo "## 🚀 Deploying ${{ github.event.inputs.course }} from AMI \`${AMI}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.BUILD_REGION }}
+
+      - name: Confirm AMI exists and is launchable
+        run: |
+          STATE=$(aws ec2 describe-images \
+            --image-ids "${{ inputs.ami_id }}" \
+            --region    ${{ env.BUILD_REGION }} \
+            --query     "Images[0].State" --output text 2>/dev/null || echo "missing")
+          if [ "${STATE}" != "available" ]; then
+            echo "AMI ${{ inputs.ami_id }} is not 'available' (state=${STATE})"; exit 1
+          fi
+          echo "AMI ${{ inputs.ami_id }} is available."
+
+      - name: Get default VPC
+        id: vpc
+        run: |
+          VPC_ID=$(aws ec2 describe-vpcs \
+            --filters "Name=isDefault,Values=true" \
+            --query   "Vpcs[0].VpcId" --output text --region ${{ env.BUILD_REGION }})
+          if [ "${VPC_ID}" = "None" ] || [ -z "${VPC_ID}" ]; then
+            aws ec2 create-default-vpc --region ${{ env.BUILD_REGION }}
+            VPC_ID=$(aws ec2 describe-vpcs \
+              --filters "Name=isDefault,Values=true" \
+              --query   "Vpcs[0].VpcId" --output text --region ${{ env.BUILD_REGION }})
+          fi
+          echo "vpc_id=${VPC_ID}" >> $GITHUB_OUTPUT
+
+      - name: Create security group
+        id: sg
+        run: |
+          SG_ID=$(aws ec2 create-security-group \
+            --group-name  "sec546-student-sg-${{ github.run_number }}" \
+            --description "SEC546 student deployment run ${{ github.run_number }}" \
+            --vpc-id      ${{ steps.vpc.outputs.vpc_id }} \
+            --region      ${{ env.BUILD_REGION }} \
+            --query GroupId --output text)
+          for PORT in 22 80 443 1080; do
+            aws ec2 authorize-security-group-ingress \
+              --group-id "${SG_ID}" --protocol tcp --port "${PORT}" --cidr 0.0.0.0/0 \
+              --region   ${{ env.BUILD_REGION }}
+          done
+          echo "sg_id=${SG_ID}" >> $GITHUB_OUTPUT
+          echo "Security group: ${SG_ID}"
+
+      - name: Generate student SSH keypair
+        run: |
+          mkdir -p ~/.ssh/students /tmp/package
+          ssh-keygen -t ed25519 \
+            -f ~/.ssh/students/student \
+            -C "sec546-student-run${{ github.run_number }}" \
+            -N "" -q
+          chmod 600 ~/.ssh/students/student
+
+      - name: Import SSH public key to AWS
+        id: keypair
+        run: |
+          KEY_NAME="sec546-student-run${{ github.run_number }}"
+          aws ec2 import-key-pair \
+            --key-name            "${KEY_NAME}" \
+            --public-key-material fileb://${HOME}/.ssh/students/student.pub \
+            --region              ${{ env.BUILD_REGION }} > /dev/null
+          echo "key_name=${KEY_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Launch student instance
+        id: launch
+        run: |
+          INSTANCE_ID=$(aws ec2 run-instances \
+            --image-id           "${{ inputs.ami_id }}" \
+            --instance-type      ${{ env.INSTANCE_TYPE }} \
+            --key-name           "${{ steps.keypair.outputs.key_name }}" \
+            --security-group-ids "${{ steps.sg.outputs.sg_id }}" \
+            --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":100,"VolumeType":"gp3","DeleteOnTermination":true}}]' \
+            --tag-specifications \
+              "ResourceType=instance,Tags=[{Key=Name,Value=sec546-student},{Key=Project,Value=sec546},{Key=DeployRun,Value=${{ github.run_number }}}]" \
+            --region ${{ env.BUILD_REGION }} \
+            --query  "Instances[0].InstanceId" --output text)
+          echo "instance_id=${INSTANCE_ID}" >> $GITHUB_OUTPUT
+          echo "Launched: ${INSTANCE_ID}"
+
+          aws ec2 wait instance-running \
+            --instance-ids "${INSTANCE_ID}" --region ${{ env.BUILD_REGION }}
+
+          VM_IP=$(aws ec2 describe-instances \
+            --instance-ids "${INSTANCE_ID}" \
+            --query  "Reservations[0].Instances[0].PublicIpAddress" \
+            --output text --region ${{ env.BUILD_REGION }})
+          echo "vm_ip=${VM_IP}" >> $GITHUB_OUTPUT
+          echo "IP: ${VM_IP}"
+
+      - name: Generate student connection package
+        run: |
+          cp infra/certs/sec546-cloud-ca.der /tmp/sec546-cloud-ca.der
+          python3 scripts/generate-student-package.py \
+            "sec546-student" \
+            "${{ steps.launch.outputs.vm_ip }}" \
+            /tmp/package \
+            /tmp/sec546-cloud-ca.der \
+            ${HOME}/.ssh/students/student
+          echo "Package contents:"
+          ls /tmp/package/
+
+      - name: Upload student connection package
+        uses: actions/upload-artifact@v4
+        with:
+          name: sec546-student-package-run${{ github.run_number }}
+          path: /tmp/package/
+          retention-days: 30
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## SEC546 Student VM Deployment"
+            echo
+            echo "| | |"
+            echo "|-|-|"
+            echo "| AMI ID | \`${{ inputs.ami_id }}\` |"
+            echo "| Region | ${{ env.BUILD_REGION }} |"
+            echo "| Instance type | ${{ env.INSTANCE_TYPE }} |"
+            echo "| Instance ID | \`${{ steps.launch.outputs.instance_id }}\` |"
+            echo "| Public IP | \`${{ steps.launch.outputs.vm_ip }}\` |"
+            echo "| Security group | \`${{ steps.sg.outputs.sg_id }}\` |"
+            echo "| Run number | ${{ github.run_number }} |"
+            echo
+            echo "### Download the package"
+            echo "Artifact: **sec546-student-package-run${{ github.run_number }}** (30-day retention) — contains:"
+            echo "- \`smartproxy-sec546.json\` (SmartProxy config with VM IP pre-filled)"
+            echo "- \`sec546-cloud-ca.der\` (CA certificate for Firefox)"
+            echo "- \`sec546-student.key\` (per-student SSH key)"
+            echo "- A quickstart README"
+            echo
+            echo "### Clean up when done"
+            echo "Terminate via AWS console (filter by tag \`DeployRun=${{ github.run_number }}\`) or:"
+            echo "\`\`\`bash"
+            echo "aws ec2 terminate-instances --region ${{ env.BUILD_REGION }} \\"
+            echo "  --instance-ids ${{ steps.launch.outputs.instance_id }}"
+            echo "\`\`\`"
+          } >> $GITHUB_STEP_SUMMARY

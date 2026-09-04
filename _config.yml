@@ -1,0 +1,14 @@
+# GitHub Pages configuration.
+# Renders README.md as the site homepage using a built-in Jekyll theme.
+# Enable at: Settings -> Pages -> Source: "Deploy from a branch" -> main / (root)
+
+title: SEC546 Lab VM Deployment
+description: Deploy the SANS SEC546 lab VM into your own AWS account with GitHub Actions
+theme: jekyll-theme-cayman
+
+# Keep infrastructure out of the published site.
+exclude:
+  - .github/
+  - infra/
+  - scripts/
+  - LICENSE
