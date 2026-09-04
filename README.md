@@ -242,19 +242,18 @@ Several SEC546 labs call an LLM. The AMI is configured to reach a **SANS-provide
 LiteLLM endpoint** using a **SANS-provided API key**, which your class lab setup
 guide tells you how to set.
 
-> **Keep using the SANS key for as long as it works — that is the first
-> preference.** It normally keeps working for **a few days after the course
-> ends**, so you can carry on practising with the labs after class without
-> setting anything up.
+> **Keep using the SANS endpoint and key for as long as they work — that is the
+> first preference.** The same key you used in class also works on the VM you
+> deploy into your own AWS account, and it normally keeps working for **a few
+> days after the course ends**. Carry it over from your class setup and change
+> nothing.
 >
-> **The SANS endpoint itself should remain available. The SANS-provided API key
-> can expire at any time**, though — including during class. If your LLM-backed
+> **The SANS endpoint itself should remain available, but the key will expire.**
+> There is **no refreshed key** — once it stops, it is done. If your LLM-backed
 > labs start failing with `401 Unauthorized`, `403 Forbidden`, or an
-> authentication error, an expired key is the most likely cause.
+> authentication error, that is what has happened.
 >
-> **Only once the SANS key has stopped working** should you switch to your own
-> Bedrock access below. During class, ask your instructor for a refreshed key
-> first.
+> **Only then** set up your own Bedrock access below.
 
 When that day comes, the fallback is to point the labs at **your own AWS Bedrock
 account** instead, using these models:
@@ -365,7 +364,7 @@ rather than a Bedrock API key, and the proxy disappears when you terminate the V
 | Public IP is blank in the summary | The default VPC subnet does not auto-assign public IPs. Assign an Elastic IP in the console, or delete and recreate the default VPC. |
 | Workflow doesn't appear in the Actions tab | On a fork, Actions are disabled until you click *I understand my workflows, go ahead and enable them*. |
 | SmartProxy connects but pages fail to load | The VM is still booting the lab services — wait 2–3 minutes after launch. If it persists, re-check the Firefox steps in your class lab setup guide, then ask your instructor. |
-| LLM labs fail with `401` / `403` / auth error | The SANS-provided LLM API key has most likely expired. Ask your instructor for a refreshed key, or use [your own Bedrock account](#optional--if-the-sans-llm-api-key-stops-working). |
+| LLM labs fail with `401` / `403` / auth error | The SANS-provided LLM API key has expired. There is no replacement key — switch to [your own Bedrock account](#optional--if-the-sans-llm-api-key-stops-working). |
 | LLM labs fail with `AccessDeniedException` | You are on your own Bedrock account but have not been granted model access. Bedrock → Model access in `us-east-1`. |
 
 ---
