@@ -6,7 +6,9 @@ Terraform, no manual console clicking beyond the initial setup.
 
 You run one workflow, wait a couple of minutes, and download a **connection
 package** containing your SmartProxy config, the lab CA certificate, and your
-personal SSH key.
+personal SSH key. You then set Firefox up with those artifacts by following the
+**lab setup guide provided during class** — that guide, not this repository, is
+the reference for actually running the labs.
 
 > **Region: `us-east-2` (US East / Ohio) throughout.**
 > AMIs are region-scoped. SANS shares the SEC546 AMI in `us-east-2`, so the VM
@@ -23,8 +25,8 @@ personal SSH key.
 | 2 | Your 12-digit AWS account ID | Top-right of the AWS console, or `aws sts get-caller-identity` |
 | 3 | **SANS has shared the SEC546 AMI with that account ID in `us-east-2`** | See [Step 1](#step-1--get-the-ami-shared-with-your-aws-account). Nothing works without this. |
 | 4 | A GitHub account | Free tier is fine. Actions minutes on a public repo are unlimited. |
-| 5 | An SSH client | Built into Windows 10+, macOS, and Linux. |
-| 6 | Firefox with the SmartProxy extension | Used to reach the lab targets through the VM. |
+| 5 | Firefox with the SmartProxy extension | How you reach the lab targets. Configure it per your class lab setup guide. |
+| 6 | An SSH client | *Optional* — only for troubleshooting a broken setup. Built into Windows 10+, macOS, and Linux. |
 
 **Cost warning.** The VM is an `m6i.2xlarge` (8 vCPU / 32 GB) with a 100 GB gp3
 root volume, in `us-east-2`. That is roughly **$0.38/hour** for compute plus
@@ -175,12 +177,30 @@ At the bottom of the run Summary, under **Artifacts**, download
 
 | File | What to do with it |
 |------|--------------------|
-| `smartproxy-sec546.json` | Import into the Firefox **SmartProxy** extension (Options → Backup/Restore → *Restore settings from file*). Your VM's IP is already filled in. |
-| `sec546-cloud-ca.der` | Import into Firefox: *Settings → Privacy & Security → Certificates → View Certificates → Authorities → Import*, and tick **Trust this CA to identify websites**. |
-| `sec546-student.key` | Your private SSH key. |
+| `smartproxy-sec546.json` | SmartProxy configuration for Firefox. Your VM's IP is already filled in. |
+| `sec546-cloud-ca.der` | The lab CA certificate, for Firefox to trust the lab sites. |
+| `sec546-student.key` | Your private SSH key. **Not needed for normal lab work** — see [Optional: connect over SSH](#optional--connect-to-the-vm-over-ssh). |
 | `README` | A short quickstart. |
 
-### Connect to the VM
+### Set up Firefox — follow your class lab setup guide
+
+> **Use the SEC546 lab setup guide provided during class** for the steps to
+> import `smartproxy-sec546.json` and `sec546-cloud-ca.der` into Firefox and to
+> work through the labs. That guide is the authoritative reference for using
+> these artifacts — this repository only covers getting the VM running and
+> producing the package.
+
+Once Firefox is configured per that guide, you browse the lab targets through
+the VM and **you are done with this repository** until it is time to tear the
+lab down in Step 6.
+
+---
+
+## Optional — connect to the VM over SSH
+
+> **You do not need SSH for normal lab work.** Everything in the course is done
+> through Firefox using the artifacts above. Use SSH only if something is wrong
+> with the setup and you or your instructor need to inspect the VM directly.
 
 ```bash
 chmod 600 sec546-student.key
@@ -193,10 +213,6 @@ open, lock the file down with `icacls`:
 ```powershell
 icacls .\sec546-student.key /inheritance:r /grant:r "$env:USERNAME:(R)"
 ```
-
-Then in Firefox, select the **SEC546-Lab** profile in SmartProxy and browse to
-the lab targets under `sans.labs`. Traffic is routed through the SOCKS5 proxy on
-port 1080 of your VM.
 
 ---
 
@@ -234,7 +250,7 @@ Also delete the IAM access key from Step 2 once the course is over
 | `Unsupported` when launching | `m6i.2xlarge` is not offered in the Availability Zone the default VPC picked. Rare in `us-east-2`. Contact your instructor. |
 | Public IP is blank in the summary | The default VPC subnet does not auto-assign public IPs. Assign an Elastic IP in the console, or delete and recreate the default VPC. |
 | Workflow doesn't appear in the Actions tab | On a fork, Actions are disabled until you click *I understand my workflows, go ahead and enable them*. |
-| SmartProxy connects but pages fail to load | The VM is still booting the lab services — wait 2–3 minutes after launch. Confirm the CA cert was imported **as an Authority** with the website-trust box ticked. |
+| SmartProxy connects but pages fail to load | The VM is still booting the lab services — wait 2–3 minutes after launch. If it persists, re-check the Firefox steps in your class lab setup guide, then ask your instructor. |
 
 ---
 
