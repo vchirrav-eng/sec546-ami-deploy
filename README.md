@@ -180,6 +180,12 @@ At the bottom of the run Summary, under **Artifacts**, download
 | `sec546-student.key` | Your private SSH key. **Not needed for normal lab work** — see [Optional: connect over SSH](#optional--connect-to-the-vm-over-ssh). |
 | `README` | A short quickstart. |
 
+> **Do not commit these files.** The package contains your private SSH key and a
+> proxy config with your VM's IP. This repo ships a `.gitignore` that already
+> excludes them by name, so unzipping the package inside your clone is safe — but
+> never use `git add -f` on them, and if you unzip somewhere else, keep them out
+> of any other repository too.
+
 ### Set up Firefox — follow your class lab setup guide
 
 > **Use the SEC546 lab setup guide provided during class** for the steps to

@@ -1,0 +1,55 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Do not commit anything from your connection package.
+#
+# The Deploy Student VM workflow produces an artifact containing your private
+# SSH key and a SmartProxy config with your VM's IP in it. If you unzip that
+# artifact inside this clone, these rules keep it out of git.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# The connection package, unzipped or still zipped
+sec546-student-package*/
+sec546-student-package*.zip
+smartproxy*.json
+sec546-student.key
+
+# Private keys and certificates of any kind
+*.key
+*.pem
+*.der
+*.crt
+*.cer
+*.p12
+*.pfx
+*.ppk
+id_rsa*
+id_ed25519*
+*.pub
+
+# The lab CA shipped with this repo is source, not a secret — keep tracking it.
+!infra/certs/sec546-cloud-ca.der
+!infra/certs/sec546-cloud-ca.pem
+
+# Credentials and environment files
+.env
+.env.*
+!.env.example
+*.envrc
+credentials
+.aws/
+*_credentials
+*secret*
+*SECRET*
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
